@@ -1,0 +1,112 @@
+name: "Terraform Plan"
+description: "Runs a Terraform Plan"
+inputs:
+  terraform_version:
+    required: true
+    type: string
+  terraform_api:
+    required: false
+    type: string
+  workspace:
+    required: false
+    type: string
+  varfile:
+    required: false
+    type: string
+  setup_terraform:
+    type: boolean
+    default: false
+  terraform_init:
+    type: boolean
+    default: false
+  state_bucket:
+    type: string
+    required: false
+  state_region:
+    type: string
+    required: false
+  state_prefix:
+    type: string
+    required: false
+  state_dynamodb_table:
+    type: string
+    required: false
+  init_args:
+    type: string
+    required: false
+  download_cache:
+    type: boolean
+    default: false
+  cache:
+    required: false
+    type: string
+  commit_sha:
+    required: false
+    type: string
+
+secrets:
+  TFE_TOKEN:
+    required: false
+    type: string
+
+outputs:
+  commit_sha:
+    description: "Commit SHA"
+    value: ${{ steps.checkout.outputs.commit }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v4
+      id: checkout
+      with:
+        ref:  ${{ inputs.commit_sha == '' && github.head_ref || inputs.commit_sha }}
+        persist-credentials: false
+
+    - name: Setup Terraform
+      uses: CSVD/gh-actions-setup-terraform@v3.1.2
+      if: ${{ inputs.setup_terraform && secrets.TFE_TOKEN != '' }}
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+        cli_config_credentials_token: ${{ secrets.TFE_TOKEN }}
+        cli_config_credentials_hostname: ${{ inputs.terraform_api }}
+
+    - name: Setup Terraform
+      uses: CSVD/gh-actions-setup-terraform@v3.1.2
+      if: ${{ inputs.setup_terraform && secrets.TFE_TOKEN == '' }}
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+
+    - uses: actions/download-artifact@master
+      with:
+        name: terraform_dir
+        path: terraform_data
+
+    - name: mkdir .terraform
+      run: mkdir .terraform
+
+    - name: set TF Data Dir
+      run: mv terraform_data/* .terraform/
+
+    - name: fix file permissions
+      run: chmod -R 777 .terraform
+
+    - name: download lockfile
+      uses: actions/download-artifact@master
+      with:
+        name: terraform_lockfile
+        path: terraform_lockfile
+
+    - name: move lockfile
+      run: mv terraform_lockfile/.terraform.lock.hcl .
+
+    - name: fix file permissions
+      run: chmod -R 600 .terraform.lock.hcl
+
+    - uses: actions/download-artifact@master
+      with:
+        name: ${{ inputs.planfile }}
+        path: terraform_plan
+        
+    - name: Terraform Apply
+      run: terraform apply -auto-approve terraform_plan/${{ inputs.planfile }}

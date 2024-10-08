@@ -1,0 +1,42 @@
+name: "S3 Upload"
+description: "Uploads artifacts to S3"
+inputs:
+  source:
+    required: true
+    type: string
+  bucket:
+    required: true
+    type: string
+  archive:
+    required: false
+    default: false
+    type: bool
+
+outputs:
+  cache_key:
+    description: "Random Generated Key"
+    value: ${{ steps.random.outputs.cache_key }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: generate random index
+      shell: python
+      id: random
+      if: ${{ inputs.random_key }}
+      run: echo random=$(pyhton random.py) >> ${GITHUB_OUTPUT}
+
+    - name: archive source
+      if: ${{ inputs.archive }}
+      shell: bash
+      run: |
+        zip -r ${{ inputs.source }} ${{ steps.random.outputs.random }}.zip
+        echo SOURCE=${{ steps.random.outputs.random }}.zip >> ${GITHUB_ENV}
+
+    - name: skip-archive source
+      shell: bash
+      if: ${{ inputs.archive == false }}
+      run:  echo SOURCE=${{ inputs.source }} >> ${GITHUB_ENV}
+
+    - run: |
+        aws s3 cp ${{ env.SOURCE }} s3://${{ inputs.bucket }}/${{ steps.random.outputs.random }}
