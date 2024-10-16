@@ -3,14 +3,14 @@ description: "Uploads artifacts to S3"
 inputs:
   source:
     required: true
-    type: string
+    description: "Source file to upload"
   bucket:
     required: true
-    type: string
+    description: "S3 Bucket to upload to"
   archive:
     required: false
-    default: false
-    type: bool
+    default: "false"
+    description: "Archive the source file"
 
 outputs:
   cache_key:
@@ -27,7 +27,7 @@ runs:
       run: echo random=$(pyhton random.py) >> ${GITHUB_OUTPUT}
 
     - name: archive source
-      if: ${{ inputs.archive }}
+      if: ${{ inputs.archive == 'true'}}
       shell: bash
       run: |
         zip -r ${{ inputs.source }} ${{ steps.random.outputs.random }}.zip
@@ -35,8 +35,10 @@ runs:
 
     - name: skip-archive source
       shell: bash
-      if: ${{ inputs.archive == false }}
-      run:  echo SOURCE=${{ inputs.source }} >> ${GITHUB_ENV}
+      if: ${{ inputs.archive == 'false' }}
+      run: echo SOURCE=${{ inputs.source }} >> ${GITHUB_ENV}
 
-    - run: |
+    - name: Upload to S3
+      shell: bash
+      run: |
         aws s3 cp ${{ env.SOURCE }} s3://${{ inputs.bucket }}/${{ steps.random.outputs.random }}
